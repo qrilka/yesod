@@ -7,6 +7,7 @@
 {-# LANGUAGE ImplicitParams #-}
 {-# LANGUAGE ConstraintKinds #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
 
 {-|
 Yesod.Test is a pragmatic framework for testing web applications built
@@ -136,6 +137,10 @@ module Yesod.Test
     , htmlQuery
     , parseHTML
     , withResponse
+
+    -- * Property tests
+    , property
+    , YesodTestable
     ) where
 
 import qualified Test.Hspec.Core.Spec as Hspec
@@ -183,6 +188,8 @@ type HasCallStack = (?callStack :: CallStack)
 import GHC.Exts (Constraint)
 type HasCallStack = (() :: Constraint)
 #endif
+
+import qualified Test.QuickCheck as QC
 
 {-# DEPRECATED byLabel "This function seems to have multiple bugs (ref: https://github.com/yesodweb/yesod/pull/1459). Use byLabelExact, byLabelContain, byLabelPrefix or byLabelSuffix instead" #-}
 {-# DEPRECATED fileByLabel "This function seems to have multiple bugs (ref: https://github.com/yesodweb/yesod/pull/1459). Use fileByLabelExact, fileByLabelContain, fileByLabelPrefix or fileByLabelSuffix instead" #-}
@@ -1316,6 +1323,32 @@ instance YesodDispatch site => Hspec.Example (SIO (YesodExampleData site) a) whe
                 return ())
             params
             ($ ())
+
+data YesodProperty site = YesodProperty { unYesodProperty :: IO (TestApp site) -> QC.Property }
+
+property :: (YesodTestable a site) => a -> IO (TestApp site) -> QC.Property
+property = unYesodProperty . toProperty
+
+class YesodTestable a site where
+  toProperty :: a -> YesodProperty site
+
+instance YesodDispatch site => YesodTestable (YesodProperty site) site where
+  toProperty = id
+
+instance (YesodDispatch site1, site1 ~ site2)  => YesodTestable (SIO (YesodExampleData site1) a) site2 where
+  toProperty action = YesodProperty $ \getTestApp -> QC.property $ do
+      (site, middleware) <- getTestApp
+      app <- toWaiAppPlain site
+      _ <- evalSIO action YesodExampleData
+        { yedApp = middleware app
+        , yedSite = site
+        , yedCookies = M.empty
+        , yedResponse = Nothing
+        }
+      return ()
+
+instance (QC.Arbitrary a, Show a, YesodTestable prop site) => YesodTestable (a -> prop) site where
+  toProperty prop = YesodProperty $ QC.property . (flip $ unYesodProperty . toProperty . prop)
 
 -- | State + IO
 --

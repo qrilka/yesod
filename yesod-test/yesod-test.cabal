@@ -30,6 +30,7 @@ library
                    , network                   >= 2.2
                    , pretty-show               >= 1.6
                    , semigroups
+                   , QuickCheck
                    , text
                    , time
                    , transformers              >= 0.2.2
