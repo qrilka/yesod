@@ -141,6 +141,7 @@ module Yesod.Test
     -- * Property tests
     , property
     , YesodTestable
+    , (==>)
     ) where
 
 import qualified Test.Hspec.Core.Spec as Hspec
@@ -1349,6 +1350,10 @@ instance (YesodDispatch site1, site1 ~ site2)  => YesodTestable (SIO (YesodExamp
 
 instance (QC.Arbitrary a, Show a, YesodTestable prop site) => YesodTestable (a -> prop) site where
   toProperty prop = YesodProperty $ QC.property . (flip $ unYesodProperty . toProperty . prop)
+
+(==>) :: YesodTestable prop site => Bool -> prop -> YesodProperty site
+False ==> _ = YesodProperty $ \_ -> QC.property QC.Discard
+True  ==> p = toProperty p
 
 -- | State + IO
 --
